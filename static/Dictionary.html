@@ -60,7 +60,7 @@
       background: transparent;
     }
     ::-webkit-scrollbar-thumb {
-      background: rgba(156, 163, 175, 0.4);
+      background: rgba(156, 163, 175, 0);
       border-radius: 9999px;
     }
     .custom-shape-bottom-right {
@@ -79,7 +79,7 @@
       border-radius: 2px;
       padding: 0 2px;
     }
-    dark mark.chat-search-highlight {
+    .dark mark.chat-search-highlight {
       background-color: #854d0e;
       color: #fff;
       border-bottom: 2px solid #ef4444;
@@ -87,6 +87,12 @@
     mark.chat-search-highlight.active-search-match {
       background-color: #fde047;
       outline: 2px solid #ef4444;
+    }
+    /* Strictly wrap long unbroken words inside message bubbles and cards */
+    .search-target,
+    .search-target * {
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
   </style>
   <link href="https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&display=swap" rel="stylesheet">
@@ -98,7 +104,7 @@
     <div class="max-w-md mx-auto flex items-center justify-between relative">
       <!-- Title Branding -->
       <div class="flex items-center space-x-2">
-        <div class="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center p-0.5 overflow-hidden">
+        <div class="w-8 h-8 rounded-full bg-white dark:bg-black flex items-center justify-center p-0.5 overflow-hidden transition-colors">
           <!-- Static logo.png Image -->
           <img src="static/logo.png" alt="Logo" class="w-full h-full object-cover rounded-full" onerror="this.onerror=null; this.src='https://via.placeholder.com/100?text=Logo';" />
         </div>
@@ -150,7 +156,7 @@
   </header>
 
   <!-- CHAT CONTAINER -->
-  <main class="flex-1 max-w-md w-full mx-auto p-4 pb-28 overflow-y-auto space-y-4" id="chatContainer">
+  <main class="flex-1 max-w-md w-full mx-auto p-4 pb-44 overflow-y-auto space-y-4" id="chatContainer">
     
     <!-- Welcome Bot Message -->
     <div class="flex flex-col items-start space-y-1">
@@ -168,16 +174,16 @@
   </main>
 
   <!-- FLOATING SCROLL BUTTON -->
-  <button id="scrollBtn" onclick="handleScrollClick()" class="fixed right-5 bottom-20 z-20 w-10 h-10 rounded-full bg-white dark:bg-cardBgDark shadow-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 transition-all transform hover:scale-105 active:scale-95 hidden">
+  <button id="scrollBtn" onclick="handleScrollClick()" class="fixed right-5 bottom-36 z-20 w-10 h-10 rounded-full bg-white dark:bg-cardBgDark shadow-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 transition-all transform hover:scale-105 active:scale-95 hidden">
     <i data-lucide="arrow-down" id="scrollIcon" class="w-5 h-5"></i>
   </button>
 
-  <!-- INPUT AREA -->
-  <div class="fixed bottom-0 left-0 right-0 z-20 bg-white/90 dark:bg-appBgDark/90 backdrop-blur-md border-t border-gray-100 dark:border-gray-800 p-3 transition-colors">
-    <form id="searchForm" onsubmit="handleFormSubmit(event)" class="max-w-md mx-auto flex items-center space-x-2">
-      <!-- Input Field Container -->
-      <div id="inputBoxContainer" class="relative flex-1 flex items-center bg-gray-100 dark:bg-cardBgDark rounded-full px-2 py-1 transition-all">
-        <!-- Voice / Mic Button Inside Input -->
+  <!-- INPUT AREA (Positioned with ~0.75in / 1in bottom gap) -->
+  <div class="fixed bottom-0 left-0 right-0 z-20 bg-white/90 dark:bg-appBgDark/90 backdrop-blur-md border-t border-gray-100 dark:border-gray-800 px-3 pt-3 pb-[0.8in] transition-colors">
+    <form id="searchForm" onsubmit="handleFormSubmit(event)" class="max-w-md mx-auto flex items-end space-x-2">
+      <!-- Input Field Container (Expands upwards up to 4-5 lines) -->
+      <div id="inputBoxContainer" class="relative flex-1 flex items-end bg-gray-100 dark:bg-cardBgDark rounded-3xl px-2 py-1 transition-all">
+        <!-- Voice / Mic Button Inside Input (Anchored at bottom) -->
         <button 
           type="button" 
           id="micBtn"
@@ -188,22 +194,23 @@
           <i data-lucide="mic" id="micIcon" class="w-5 h-5"></i>
         </button>
 
-        <input 
-          type="text" 
+        <textarea 
           id="wordInput" 
+          rows="1"
           oninput="handleInputChange(event)"
+          onkeydown="handleInputKeydown(event)"
           placeholder="Ask 𝕯𝖊𝖘𝖍 𝖑𝖊𝖝𝖎𝖈𝖔𝖓..." 
-          class="w-full bg-transparent text-gray-800 dark:text-gray-100 px-2 py-2 border-none focus:outline-none text-sm placeholder:font-fraktur"
+          class="w-full bg-transparent text-gray-800 dark:text-gray-100 px-2 py-2 border-none focus:outline-none text-sm placeholder:font-fraktur resize-none overflow-y-auto leading-5 max-h-[108px]"
           autocomplete="off"
-        />
+        ></textarea>
       </div>
 
-      <!-- Action Button (Send Arrow / Pause) Outside Container -->
+      <!-- Action Button (Send Arrow / Pause) Outside Container, Always at Bottom -->
       <button 
         type="button" 
         id="actionBtn"
         onclick="handleActionClick()"
-        class="p-3 rounded-full bg-brandYellow hover:bg-brandYellowDark text-white shadow-md transition-all active:scale-95 items-center justify-center flex-shrink-0 hidden"
+        class="p-3 rounded-full bg-brandYellow hover:bg-brandYellowDark text-white shadow-md transition-all active:scale-95 items-center justify-center flex-shrink-0 hidden self-end"
       >
         <i data-lucide="arrow-up" id="actionIcon" class="w-5 h-5"></i>
       </button>
@@ -245,10 +252,30 @@
       return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     }
 
-    // Input Change Handler for Dynamic Button Visibility
+    // Auto-resize textarea up to ~5 lines (108px)
+    function autoResizeTextarea(el) {
+      if (!el) return;
+      el.style.height = 'auto';
+      const maxHeight = 108; // ~5 lines
+      el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px';
+    }
+
+    // Handle Enter to submit (Shift+Enter for new line)
+    function handleInputKeydown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const form = document.getElementById('searchForm');
+        form.requestSubmit();
+      }
+    }
+
+    // Input Change Handler for Dynamic Button Visibility & Auto-Growing Height
     function handleInputChange(e) {
+      const target = e.target;
+      autoResizeTextarea(target);
+
       const actionBtn = document.getElementById('actionBtn');
-      const val = e.target.value.trim();
+      const val = target.value.trim();
 
       if (isGenerating) return; // Keep Pause state active while generating
 
@@ -358,7 +385,7 @@
           span.innerHTML = val.replace(regex, '<mark class="chat-search-highlight">$1</mark>');
           node.parentNode.replaceChild(span, node);
         }
-      } else if (node.nodeType === 1 && node.childNodes && !/^(mark|script|style|button|input)$/i.test(node.tagName)) {
+      } else if (node.nodeType === 1 && node.childNodes && !/^(mark|script|style|button|input|textarea)$/i.test(node.tagName)) {
         Array.from(node.childNodes).forEach(child => highlightNode(child, regex));
       }
     }
@@ -581,7 +608,7 @@
       const msgDiv = document.createElement('div');
       msgDiv.className = 'flex justify-end my-2';
       msgDiv.innerHTML = `
-        <div class="bg-brandYellow text-white font-medium px-4 py-2.5 rounded-2xl rounded-tr-xs shadow-sm max-w-[80%] text-sm leading-relaxed search-target">
+        <div class="bg-brandYellow text-white font-medium px-4 py-2.5 rounded-2xl rounded-tr-xs shadow-sm max-w-[80%] text-sm leading-relaxed break-words overflow-hidden search-target">
           ${escapeHtml(text)}
         </div>
       `;
@@ -636,6 +663,7 @@
       ensureSearchHeaderVisible();
 
       input.value = '';
+      input.style.height = 'auto';
       appendUserMessage(rawWord);
 
       // Transition Button to Pause State
@@ -743,14 +771,14 @@
           </div>
           <span class="font-fraktur font-bold text-sm">𝕯𝖊𝖘𝖍 𝖑𝖊𝖝𝖎𝖈𝖔𝖓</span>
         </div>
-        <div id="${msgId}" class="relative bg-white dark:bg-cardBgDark rounded-2xl rounded-tl-sm p-4 pb-8 shadow-sm border border-gray-100 dark:border-gray-800 max-w-[90%] w-full transition-all search-target">
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-bold capitalize">${escapeHtml(word)}</h3>
+        <div id="${msgId}" class="relative bg-white dark:bg-cardBgDark rounded-2xl rounded-tl-sm p-4 pb-8 shadow-sm border border-gray-100 dark:border-gray-800 max-w-[90%] w-full transition-all break-words search-target">
+          <div class="flex items-start justify-between gap-2">
+            <h3 class="text-lg font-bold capitalize break-words min-w-0 flex-1">${escapeHtml(word)}</h3>
             <!-- Speaker Button for Offline TTS -->
             <button 
               onclick="handleSpeech(this, '${escapeHtml(speechContent)}')"
               title="Speak definition"
-              class="p-1.5 text-gray-500 hover:text-brandYellow transition-all rounded-full"
+              class="p-1.5 text-gray-500 hover:text-brandYellow transition-all rounded-full flex-shrink-0"
             >
               <i data-lucide="volume-2" class="w-4 h-4"></i>
             </button>
@@ -758,7 +786,7 @@
 
           ${definitionsHtml}
 
-          <!-- Small Circular Logo Button (𝕯𝖊𝖘<u>𝖍</u> 𝖑𝖊𝖝𝖎𝖈𝖔𝖓 deshai.in/ask) -->
+          <!-- Small Circular Logo Button (𝕯𝖊𝖘𝖍 𝖑𝖊𝖝𝖎𝖈𝖔𝖓 deshai.in/ask) -->
           <div 
             id="logo-${msgId}"
             onclick="triggerDeshAI('${escapeHtml(word)}', '${msgId}')" 
@@ -782,7 +810,7 @@
 
       const messageText = isServerBusy
         ? `it seems like server is busy. word '${escapeHtml(word)}' not found, please try <button onclick="triggerDeshAI('${escapeHtml(word)}', '${msgId}')" class="font-fraktur font-bold text-brandYellowDark dark:text-brandYellow hover:underline ml-1">𝕯𝖊𝖘𝖍 𝖑𝖊𝖝𝖎𝖈𝖔𝖓</button>`
-        : `word '${escapeHtml(word)}' not found in dictionary <button onclick="triggerDeshAI('${escapeHtml(word)}', '${msgId}')" class="font-fraktur font-bold text-brandYellowDark dark:text-brandYellow hover:underline ml-1">try 𝕯𝖊𝖘𝖍 𝐀𝖎</button>`;
+        : `word '${escapeHtml(word)}' not found in dictionary <button onclick="triggerDeshAI('${escapeHtml(word)}', '${msgId}')" class="font-monospace font-bold text-brandYellowDark dark:text-brandYellow hover:underline ml-1">try 𝕯𝖊𝖘𝖍 𝐀𝖎</button>`;
 
       const cardDiv = document.createElement('div');
       cardDiv.className = 'flex flex-col items-start space-y-1 my-3';
@@ -794,8 +822,8 @@
           </div>
           <span class="font-fraktur font-bold text-sm">𝕯𝖊𝖘𝖍 𝖑𝖊𝖝𝖎𝖈𝖔𝖓</span>
         </div>
-        <div id="${msgId}" class="relative bg-white dark:bg-cardBgDark rounded-2xl rounded-tl-sm p-4 pb-8 shadow-sm border border-gray-100 dark:border-gray-800 max-w-[90%] w-full search-target">
-          <p class="text-sm text-gray-600 dark:text-gray-300">
+        <div id="${msgId}" class="relative bg-white dark:bg-cardBgDark rounded-2xl rounded-tl-sm p-4 pb-8 shadow-sm border border-gray-100 dark:border-gray-800 max-w-[90%] w-full break-words search-target">
+          <p class="text-sm text-gray-600 dark:text-gray-300 break-words">
             ${messageText}
           </p>
 
@@ -905,118 +933,70 @@
       scrollToBottom();
     }
 
-    // Query AI Model directly asking deshai.in/ask endpoint with robust fallback
-  async function queryDeshAIModel(word, isEnglish, signal) {
+    // Query AI Model directly asking deshai.in/ask endpoint with strict dictionary enforcement
+    async function queryDeshAIModel(word, isEnglish, signal) {
+      const dictionaryInstruction = `You are 𝕯𝖊𝖘𝖍 𝖑𝖊𝖝𝖎𝖈𝖔𝖓 — a strict dictionary meaning assistant.
 
-  const dictionaryInstruction = `
-You are 𝕯𝖊𝖘𝖍 𝖑𝖊𝖝𝖎𝖈𝖔𝖓 — a dictionary meaning assistant.
-
-The user's input is:
-"${word}"
+The user wants the dictionary definition of the word/phrase: "${word}"
 
 IMPORTANT RULES:
-
 1. NEVER respond conversationally.
-2. NEVER reply to the user's word as if they are talking to you.
-3. NEVER say things like:
-   "Hey, how are you?"
-   "You're welcome!"
-   "Hello!"
-   "Sure!"
-   "How can I help?"
-4. Your job is ONLY to explain the meaning of the requested word/phrase.
+2. NEVER reply to the user's word as if they are chatting with you.
+3. NEVER say things like "Hello! How can I help you today?", "Hey, how are you?", "You're welcome!", or "Sure!".
+4. Your ONLY job is to define the exact word/phrase "${word}" as a dictionary entry.
 
 LANGUAGE RULE:
-
-A) IF THE INPUT IS ENGLISH:
-- Give a concise English definition.
+${isEnglish ? `Since "${word}" is in English:
+- Give a concise English dictionary definition.
 - Give its Hindi meaning in ONLY ONE Hindi word.
-- Give EXACTLY ONE short, natural English example sentence.
-- The exact requested word must be **bold** inside the example.
+- Give EXACTLY ONE short, natural English example sentence with **${word}** in bold.
 
-Format:
+Strict Output Format:
 **Meaning:** [English definition]
 **Hindi:** [ONE Hindi word]
-**Example:** [Sentence containing **${word}**]
-
-B) IF THE INPUT IS NOT ENGLISH:
+**Example:** [Sentence containing **${word}**]` : `Since "${word}" is not in English:
 - Give ONLY its English meaning/translation.
-- DO NOT give a Hindi meaning.
-- Give EXACTLY ONE short, natural English example sentence.
-- The original requested word must be **bold** inside the example.
+- Give EXACTLY ONE short, natural English example sentence with **${word}** in bold.
 
-Format:
+Strict Output Format:
 **Meaning:** [English meaning/translation]
-**Example:** [Sentence containing **${word}**]
+**Example:** [Sentence containing **${word}**]`}
 
-SPECIAL CASE — GREETINGS:
+SPECIAL CASE — GREETINGS & COMMON EXPRESSIONS:
+If "${word}" is "hi", "hello", "hey", "thanks", "sorry", or "bye", DO NOT reply to the greeting. Define the word itself as a dictionary entry (for example, for "hi": **Meaning:** A casual greeting used to say hello. **Hindi:** नमस्ते **Example:** **Hi**, how are you?).`;
 
-If the input is "hi", do NOT reply to the greeting.
+      const deshRes = await fetch('https://deshai.in/ask', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        signal: signal,
+        body: JSON.stringify({
+          question: dictionaryInstruction,
+          word: word,
+          prompt: dictionaryInstruction,
+          isEnglish: isEnglish
+        })
+      });
 
-Instead explain it as a dictionary entry.
+      if (!deshRes.ok) {
+        throw new Error(`𝕯𝖊𝖘𝖍 𝐀𝖎 API Error: ${deshRes.status}`);
+      }
 
-For example:
+      const data = await deshRes.json();
 
-Input: hi
+      const deshText =
+        data.answer ||
+        data.response ||
+        data.result ||
+        data.text;
 
-**Meaning:** A casual greeting used to say hello.
-**Hindi:** नमस्ते
-**Example:** **Hi**, how are you?
+      if (deshText) {
+        return parseMarkdownBold(deshText);
+      }
 
-Similarly:
-
-Input: hello
-
-**Meaning:** A greeting used when meeting or addressing someone.
-**Hindi:** नमस्ते
-**Example:** **Hello**, how are you?
-
-OTHER RULES:
-- "thanks" → explain that it is an expression of gratitude; do NOT say "You're welcome."
-- "sorry" → explain that it expresses apology; do NOT apologize back.
-- "bye" → explain that it is used when leaving; do NOT say goodbye.
-- If the word has multiple meanings, give the most common meaning only.
-- Exactly ONE example. Never give two examples.
-- Keep the answer concise.
-- Do not add unnecessary explanations.
-- Do not add pronunciation unless specifically requested.
-- Do not add synonyms unless specifically requested.
-- Do not add multiple Hindi words.
-- Use **bold** exactly where requested.
-`;
-
-  const deshRes = await fetch('https://deshai.in/ask', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    signal: signal,
-    body: JSON.stringify({
-      question: word,
-      prompt: dictionaryInstruction,
-      isEnglish: isEnglish
-    })
-  });
-
-  if (!deshRes.ok) {
-    throw new Error(`𝕯𝖊𝖘𝖍 𝐀𝖎 API Error: ${deshRes.status}`);
-  }
-
-  const data = await deshRes.json();
-
-  const deshText =
-    data.answer ||
-    data.response ||
-    data.result ||
-    data.text;
-
-  if (deshText) {
-    return parseMarkdownBold(deshText);
-  }
-
-  throw new Error("Empty response received from 𝕯𝖊𝖘𝖍 𝐀𝖎.");
-}
-
+      throw new Error("Empty response received from 𝕯𝖊𝖘𝖍 𝐀𝖎.");
+    }
 
     // Append AI Response under previous answer block
     function appendAiResponse(parentCardId, word, aiText) {
@@ -1029,10 +1009,10 @@ OTHER RULES:
       const speechText = aiText.replace(/<[^>]*>/g, '');
 
       aiBlock.innerHTML = `
-        <div class="flex items-center justify-between text-xs font-bold text-brandYellowDark dark:text-brandYellow mb-1">
+        <div class="flex items-center justify-between text-xs font-bold mb-1">
           <div class="flex items-center space-x-1">
-            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
-            <span class="font-fraktur font-bold">by ~𝕯𝖊𝖘𝖍 𝐀𝖎</span>
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-brandYellow"></i>
+            <span class="font-sans font-bold text-gray-900 dark:text-white tracking-wide">by ~𝕯𝖊𝖘𝖍 𝐀𝖎</span>
           </div>
           <!-- Speaker Button for AI Response -->
           <button 
