@@ -132,7 +132,7 @@
     .top-menu-btn svg { width: 18px; height: 18px; fill: #333; }
 
     #chatContainer {
-      flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 24px;
+      flex: 1; overflow-y: auto; overflow-x: hidden; padding: 15px; display: flex; flex-direction: column; gap: 24px;
       width: 100%; max-width: 800px; margin: 0 auto;
       -webkit-overflow-scrolling: touch; scroll-behavior: smooth;
     }
@@ -210,10 +210,35 @@
     }
     @keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
 
-    .ai-msg-wrapper { align-self: flex-start; width: 100%; display: flex; flex-direction: column; gap: 8px; }
+    /* Strict Anti-Overflow Rules for AI & User Messages */
+    .ai-msg-wrapper { 
+      align-self: flex-start; width: 100%; max-width: 100%; display: flex; flex-direction: column; gap: 8px; 
+      min-width: 0; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word;
+    }
     .ai-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
     .ai-name { font-weight: 700; font-size: 14px; color: #1f2937; }
-    .ai-content { padding: 4px 0; line-height: 1.6; font-size: 15px; color: #333; }
+    .ai-content { 
+      padding: 4px 0; line-height: 1.6; font-size: 15px; color: #333; 
+      width: 100%; max-width: 100%; min-width: 0;
+      overflow-wrap: break-word; word-wrap: break-word; word-break: break-word;
+    }
+    .ai-content * {
+      max-width: 100%;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      word-break: break-word;
+    }
+    .ai-content pre, .ai-content code {
+      white-space: pre-wrap !important;
+      word-break: break-all !important;
+      overflow-x: auto;
+      max-width: 100%;
+    }
+    .ai-content table {
+      display: block;
+      max-width: 100%;
+      overflow-x: auto;
+    }
 
     .loading-container { display: flex; flex-direction: column; gap: 12px; width: 100%; }
     .status-text { font-size: 14px; color: #6b7280; font-weight: 500; transition: all 0.3s ease; }
@@ -226,11 +251,19 @@
     .shimmer-block.short { width: 60%; }
     @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-    .user-msg-wrapper { align-self: flex-end; max-width: 85%; position: relative; }
+    .user-msg-wrapper { 
+      align-self: flex-end; max-width: 85%; position: relative; 
+      min-width: 0;
+    }
     .user-msg { 
         background-color: var(--accent-color); color: white; padding: 10px 16px; 
         border-radius: 18px 18px 4px 18px; font-size: 15px; cursor: pointer;
         user-select: none; -webkit-user-select: none;
+        max-width: 100%;
+        overflow-wrap: break-word;
+        word-wrap: break-word;
+        word-break: break-word;
+        white-space: pre-wrap;
     }
 
     .edit-popup {
@@ -268,9 +301,9 @@
       background-color: #ffe4e6;
     }
 
-    /* Fixed Screen fitting configuration for Mobile published pages */
+    /* Raised Bottom Section (~0.5 inch / 48px elevated from very bottom of screen) */
     .bottom-section { 
-      width: 100%; max-width: 850px; margin: 0 auto; padding: 10px 12px 25px; 
+      width: 100%; max-width: 850px; margin: 0 auto; padding: 10px 12px 48px; 
       display: flex; align-items: center; gap: 8px; position: relative; 
       background: white; z-index: 101;
     }
@@ -293,7 +326,7 @@
       flex: 1; background: #f3f4f6; border-radius: 28px; display: flex; align-items: center;
       padding: 2px 6px; border: 2.5px solid transparent; transition: all 0.3s ease;
       position: relative; box-shadow: 0 4px 12px var(--dull-orange-shadow);
-      cursor: text; min-width: 0;
+      cursor: text; min-width: 0; max-width: 100%;
     }
     .unified-input-cont.glow-orange { 
       border-color: var(--accent-color); 
@@ -303,7 +336,7 @@
     #question {
       flex: 1; border: none; outline: none; background: transparent; padding: 10px 8px;
       font-size: 16px; resize: none; max-height: 120px; font-family: inherit; line-height: 1.4;
-      min-width: 0;
+      min-width: 0; overflow-x: hidden; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word;
     }
     .inner-btn {
       width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer;
@@ -317,9 +350,9 @@
     .send-action-btn svg { width: 18px; height: 18px; fill: #4b5563; }
     .send-action-btn.active svg { fill: white; }
 
-    /* Float tools menu strictly above the input bar preventing shifting layout */
+    /* Float tools menu strictly above the raised input bar */
     .tools-menu {
-      position: absolute; bottom: 85px; left: 12px; background: white; border-radius: 18px;
+      position: absolute; bottom: 106px; left: 12px; background: white; border-radius: 18px;
       box-shadow: 0 8px 25px rgba(0,0,0,0.12); padding: 12px; display: none; flex-direction: column; min-width: 220px;
       border: 1px solid #f0f0f0; z-index: 1000;
     }
@@ -331,12 +364,26 @@
     .menu-item:hover { background: #f9fafb; }
     .menu-item.active-mode { background: #fffcf0; border: 1px solid var(--accent-border); }
     
+    /* Dynamic Disclaimer Notice positioned neatly just below the raised input container */
     .disclaimer-banner {
-        position: fixed; bottom: 4px; left: 0; right: 0; text-align: center;
-        font-size: 10px; color: #999; pointer-events: none; z-index: 102;
-        transition: opacity 0.5s ease-out; opacity: 0;
+        position: fixed; bottom: 16px; left: 0; right: 0; text-align: center;
+        font-size: 11px; font-weight: 600; color: var(--accent-color); pointer-events: none; z-index: 102;
+        opacity: 0;
+        text-shadow: 0 0 10px var(--accent-color);
     }
-    .video-container { margin-top: 12px; border-radius: 14px; overflow: hidden; background: #000; aspect-ratio: 16/9; }
+    .disclaimer-banner.blink-glow {
+        animation: disclaimerBlinkGlow 2.8s ease-in-out forwards;
+    }
+    @keyframes disclaimerBlinkGlow {
+        0% { opacity: 0; text-shadow: 0 0 2px var(--accent-color); transform: translateY(2px); }
+        18% { opacity: 1; text-shadow: 0 0 14px var(--accent-color), 0 0 24px var(--accent-color); transform: translateY(0); }
+        36% { opacity: 0.25; text-shadow: 0 0 4px var(--accent-color); }
+        55% { opacity: 1; text-shadow: 0 0 16px var(--accent-color), 0 0 26px var(--accent-color); }
+        80% { opacity: 0.95; text-shadow: 0 0 10px var(--accent-color); }
+        100% { opacity: 0; text-shadow: 0 0 2px var(--accent-color); transform: translateY(2px); }
+    }
+
+    .video-container { margin-top: 12px; border-radius: 14px; overflow: hidden; background: #000; aspect-ratio: 16/9; max-width: 100%; }
     
     .image-card { 
       width: 100%; max-width: 320px; aspect-ratio: 1/1; border-radius: 16px; 
@@ -457,7 +504,7 @@
         width: 100%;
         max-width: 850px;
         margin: 0 auto;
-        padding: 10px 12px;
+        padding: 10px 12px 48px;
         position: relative;
     }
     .voice-circle-viewport {
@@ -477,7 +524,7 @@
     .voice-cut-btn {
         position: absolute;
         right: 20px;
-        bottom: 25px;
+        bottom: 60px;
         background-color: #fee2e2;
         border: 1.5px solid #fecdd3 !important;
         color: #f43f5e;
@@ -704,7 +751,7 @@
   </div>
 
   <!-- Draggable Scroll Action FAB (Snaps to sides) -->
-  <div class="floating-actions" id="fabContainer" style="bottom: 95px; right: 20px;">
+  <div class="floating-actions" id="fabContainer" style="bottom: 115px; right: 20px;">
     <!-- Circular Red Cancel Button -->
     <div id="cancelEditBtn" class="fab-btn mb-2" onclick="cancelEditing(event)">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
@@ -793,7 +840,7 @@
     </div>
   </div>
 
-  <!-- Dynamic Disclaimer Notice: Disappears after 3 seconds on response streams -->
+  <!-- Dynamic Disclaimer Notice: Positioned cleanly below the raised input bar, glows/blinks with accent theme -->
   <div class="disclaimer-banner" id="disclaimerBanner">𝕯𝖊𝕾𝖍 𝐀𝖎 can make mistakes. Consider checking important information.</div>
 
   <!-- Settings Detailed Options Modal -->
@@ -868,6 +915,7 @@
     let voiceIsDragging = false, voicePointer = new THREE.Vector2(999, 999), voiceLerpedPointer = new THREE.Vector2(999, 999);
     let voiceOrbitAngle = 0, voiceSmoothedLevel = 0.0, voiceTargetX = 999.0, voiceTargetY = 999.0;
     let voiceAnimationFrameId;
+    let interactionStrength = 0.0;
 
     // Search States
     let currentSearchQuery = "";
@@ -889,6 +937,16 @@
     // Authentic Hardcoded API Keys fallbacks
     const POLL_KEY = "sk_R7H6lZh8ozUQlg4SCPI9TJUKCvWjSVJ2";
     const YT_KEY = "AIzaSyCBM7PzVnA1rZQy0TwlrgejBmYvVeC3VDc";
+
+    // Helper to safely escape HTML tags in user input while preserving proper text wrapping
+    function escapeHTML(str) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
 
     // Global click dismiss handler covering all interactive states and menus (Welcome-screen safe!)
     window.handleGlobalClick = function(e) {
@@ -1155,7 +1213,7 @@
       let newY = initialY + dy;
 
       newX = Math.max(10, Math.min(window.innerWidth - 60, newX));
-      newY = Math.max(10, Math.min(window.innerHeight - 100, newY));
+      newY = Math.max(10, Math.min(window.innerHeight - 120, newY));
 
       draggableFab.style.left = `${newX}px`;
       draggableFab.style.top = `${newY}px`;
@@ -1192,7 +1250,7 @@
       } else if (minDistance === distToTop) {
         draggableFab.style.top = '16px';
       } else {
-        draggableFab.style.top = `${screenH - 120}px`;
+        draggableFab.style.top = `${screenH - 140}px`;
       }
 
       setTimeout(() => {
@@ -1302,14 +1360,14 @@
          voiceAudioBuffer = new Uint8Array(voiceAnalyser.frequencyBinCount);
       } catch(e) {}
 
-      recognition.start();
+      if (recognition) recognition.start();
     };
 
     window.deactivateDirectVoiceMode = function(e) {
       if(e) e.stopPropagation();
       activeDirectVoiceConv = false;
       speechActive = false;
-      recognition.stop();
+      if (recognition) recognition.stop();
       if (window.speechSynthesis) window.speechSynthesis.cancel();
 
       // Shut down audio contextual pipelines
@@ -1415,7 +1473,6 @@
       const targets = [...userMsgs, ...aiContents];
 
       targets.forEach((elem) => {
-        const innerHTML = elem.innerHTML;
         const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
         
         let textNodes = [];
@@ -1480,6 +1537,9 @@
          return;
       }
 
+      // Trigger blinking disclaimer glow right below input container on every search/question
+      triggerDisclaimerBlink();
+
       const welcome = document.getElementById('welcomeScreen');
       if (welcome) welcome.remove();
 
@@ -1510,11 +1570,11 @@
         wrapper.id = 'msg-' + msgId;
         
         if(role === 'user') {
+            const safeText = escapeHTML(text);
+            const escapedAttr = text.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
             wrapper.innerHTML = `
-                <div class="user-msg" onmousedown="startPress(event, ${msgId})" ontouchstart="startPress(event, ${msgId})" onmouseup="cancelPress()" ontouchend="cancelPress()">
-                    ${text}
-                </div>
-                <div class="edit-popup" id="edit-${msgId}" onclick="triggerEdit(${msgId}, '${text.replace(/'/g, "\\'")}', event)">
+                <div class="user-msg" onmousedown="startPress(event, ${msgId})" ontouchstart="startPress(event, ${msgId})" onmouseup="cancelPress()" ontouchend="cancelPress()">${safeText}</div>
+                <div class="edit-popup" id="edit-${msgId}" onclick="triggerEdit(${msgId}, '${escapedAttr}', event)">
                     <svg viewBox="0 0 24 24" width="16" fill="#666"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                     <span style="font-size:12px; font-weight:bold; margin-left:4px;">Edit</span>
                 </div>
@@ -1580,8 +1640,12 @@
         if(label) label.innerText = STATUS_PHRASES[phraseIdx];
       }, 1200);
 
-      const languageDirective = outputLanguage !== 'en' ? ` (Translate response to language locale: ${outputLanguage} and answer strictly in that language)` : ' (Answer strictly in English language layout)';
-      const optimizedQuery = `${q}${languageDirective}`;
+      // Concise persona & language directive attached cleanly to query
+      const languageDirective = outputLanguage !== 'en' 
+        ? `Reply in ${outputLanguage}.` 
+        : `Reply in English.`;
+      const identityDirective = `[System Note: You are Desh Ai. Do not repeat your name in regular answers; only introduce yourself as Desh Ai when greeted (e.g., "Hello, Desh Ai welcomes you!") or when asked who you are. ${languageDirective}]`;
+      const optimizedQuery = `${q}\n${identityDirective}`;
 
       try {
         const res = await fetch("https://deshai.in/ask", {
@@ -1651,8 +1715,8 @@
           }
         }
 
-        // Show Disclaimer Banner only on response completion for exactly 3 seconds
-        showDisclaimerBanner();
+        // Glow/blink Disclaimer Banner again on response completion
+        triggerDisclaimerBlink();
 
       } catch (e) {
         clearInterval(phraseInterval);
@@ -1661,11 +1725,10 @@
       }
     }
 
-    function showDisclaimerBanner() {
-      disclaimerBanner.style.opacity = '1';
-      setTimeout(() => {
-        disclaimerBanner.style.opacity = '0';
-      }, 3000);
+    function triggerDisclaimerBlink() {
+      disclaimerBanner.classList.remove('blink-glow');
+      void disclaimerBanner.offsetWidth;
+      disclaimerBanner.classList.add('blink-glow');
     }
 
     async function typeEffect(id, text) {
@@ -1702,9 +1765,9 @@
 
       const dpr = Math.min(window.devicePixelRatio, 2);
       voiceRenderer.setPixelRatio(dpr);
-      voiceRenderer.setSize(container.clientWidth, container.clientHeight);
+      voiceRenderer.setSize(72, 72);
 
-      const PARTICLE_COUNT = 3000; // Scaled down for 1" Circular viewport
+      const PARTICLE_COUNT = 3000;
       const geometry = new THREE.BufferGeometry();
       const positions = new Float32Array(PARTICLE_COUNT * 3);
       const colors = new Float32Array(PARTICLE_COUNT * 3);
@@ -1827,7 +1890,6 @@
         voiceAnimationFrameId = requestAnimationFrame(renderLoop);
         const t = clock.getElapsedTime();
 
-        // Voice reactivity amplification
         if (speechActive && voiceAnalyser) {
           voiceAnalyser.getByteFrequencyData(voiceAudioBuffer);
           let total = 0;
@@ -1902,7 +1964,7 @@
       const pointer = new THREE.Vector2(999.0, 999.0);
       const lerpedPointer = new THREE.Vector2(999.0, 999.0);
       let isInteracting = false;
-      let interactionStrength = 0.0;
+      let localInteractionStrength = 0.0;
 
       const PARTICLE_COUNT = 9500;
       const geometry = new THREE.BufferGeometry();
@@ -2028,7 +2090,7 @@
         isInteracting = true;
         updatePointerCoords(e);
         lerpedPointer.copy(pointer);
-        interactionStrength = 1.0;
+        localInteractionStrength = 1.0;
       }, { passive: true });
 
       container.addEventListener('pointermove', (e) => {
@@ -2040,7 +2102,7 @@
 
       const clearMagnetism = () => {
          isInteracting = false;
-         interactionStrength = 0.0;
+         localInteractionStrength = 0.0;
          pointer.set(999.0, 999.0);
          lerpedPointer.set(999.0, 999.0);
       };
@@ -2062,15 +2124,15 @@
         const t = clock.getElapsedTime();
 
         if (isInteracting) {
-          interactionStrength = 1.0;
+          localInteractionStrength = 1.0;
           lerpedPointer.copy(pointer);
         } else {
-          interactionStrength = 0.0;
+          localInteractionStrength = 0.0;
           lerpedPointer.set(999.0, 999.0);
         }
 
         material.uniforms.time.value = t;
-        material.uniforms.uInteractionStrength.value = interactionStrength;
+        material.uniforms.uInteractionStrength.value = localInteractionStrength;
         material.uniforms.uMouse.value.copy(lerpedPointer);
 
         camera.position.x = Math.sin(t * 0.08) * 8;
@@ -2142,6 +2204,7 @@
         document.getElementById(`check-${id}`).style.display = "inline-flex";
         
         addActions(`act-${id}`, id, true, imgUrl);
+        triggerDisclaimerBlink();
         scrollToBottom();
       };
 
@@ -2320,31 +2383,4 @@
     };
   </script>
 </body>
-</html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+</html>   
