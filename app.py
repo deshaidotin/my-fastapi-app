@@ -1,7 +1,13 @@
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
+from fastapi.responses import (
+    FileResponse,
+    StreamingResponse,
+    JSONResponse
+)
+from fastapi import HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -11,53 +17,53 @@ import time
 import langid
 import re
 import io
+import uuid
 
 from typing import Dict, List
+
+from groq import Groq
 
 from reportlab.platypus import SimpleDocTemplate, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
 from gtts import gTTS
 
-# IMPORTANT:
-# Mistral SDK v2.x uses this import path.
-from mistralai.client import Mistral
-
 
 # ============================================================
-# LOAD ENVIRONMENT VARIABLES
+# ENVIRONMENT VARIABLES
 # ============================================================
 
 load_dotenv()
 
-
-# ============================================================
-# API KEYS & CLIENTS
-# ============================================================
-
-MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 HF_API_KEY = os.getenv("HF_API_KEY")
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 
-# Mistral client
-# Do NOT crash the whole server if the API key is missing.
-if not MISTRAL_API_KEY or MISTRAL_API_KEY == "YOUR_KEY":
-    print(
-        "WARNING: MISTRAL_API_KEY is missing or invalid "
-        "in Environment Variables."
-    )
-    mistral_client = None
+# ============================================================
+# GROQ CONFIGURATION
+# ============================================================
+
+GROQ_MODEL = "openai/gpt-oss-20b"
+
+groq_client = None
+
+if not GROQ_API_KEY or GROQ_API_KEY == "YOUR_KEY":
+    print("WARNING: GROQ_API_KEY is missing.")
 else:
     try:
-        mistral_client = Mistral(api_key=MISTRAL_API_KEY)
-        print("Mistral client initialized successfully.")
+        groq_client = Groq(
+            api_key=GROQ_API_KEY,
+            timeout=45.0,
+            max_retries=0
+        )
+        print("Groq client initialized successfully.")
+
     except Exception as e:
-        print(f"WARNING: Failed to initialize Mistral client: {e}")
-        mistral_client = None
+        print(f"Groq initialization error: {e}")
 
 
 # ============================================================
-# EXTERNAL API CONFIGURATION
+# HUGGING FACE CONFIGURATION
 # ============================================================
 
 HF_IMAGE_URL = (
@@ -67,16 +73,14 @@ HF_IMAGE_URL = (
 
 
 # ============================================================
-# USAGE LIMITS & IN-MEMORY STORAGE
+# USAGE LIMITS
 # ============================================================
 
 image_limit_per_day = 5
 question_limit_per_day = 200
 
-ip_usage_tracker: Dict[str, Dict[str, int]] = {}
+ip_usage_tracker: Dict[str, Dict] = {}
 chat_history: Dict[str, List[Dict[str, str]]] = {}
-
-# Store last answer per IP for PDF & TTS-related functionality.
 last_answer: Dict[str, str] = {}
 
 
@@ -84,8 +88,10 @@ last_answer: Dict[str, str] = {}
 # FASTAPI SETUP
 # ============================================================
 
-app = FastAPI()
-
+app = FastAPI(
+    title="Desh AI",
+    version="2.0"
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -94,8 +100,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# Make sure static directory exists before mounting it.
 os.makedirs("static", exist_ok=True)
 
 app.mount(
@@ -127,10 +131,6 @@ class Question(BaseModel):
 # ============================================================
 
 def convert_to_latex_math(text: str) -> str:
-    """
-    Converts common spoken mathematical expressions
-    into simple LaTeX-compatible notation.
-    """
 
     replacements = {
         r"\b1\s+upon\s+2\b": r"\\frac{1}{2}",
@@ -156,35 +156,32 @@ def convert_to_latex_math(text: str) -> str:
 
 
 def detect_language(text: str) -> str:
-    """
-    Detect the language of the user's question.
-    """
 
     try:
         lang, _ = langid.classify(text)
         return lang
+
     except Exception:
         return "en"
 
 
+def get_client_ip(request: Request) -> str:
+
+    if request.client:
+        return request.client.host
+
+    return "unknown"
+
+
 def reset_if_new_day(ip: str):
-    """
-    Reset question/image usage and chat history
-    when a new day starts.
-    """
 
-    now = time.localtime()
-
-    today = (
-        f"{now.tm_year}-"
-        f"{now.tm_mon}-"
-        f"{now.tm_mday}"
-    )
+    today = time.strftime("%Y-%m-%d")
 
     if (
         ip not in ip_usage_tracker
         or ip_usage_tracker[ip].get("date") != today
     ):
+
         ip_usage_tracker[ip] = {
             "count": 0,
             "img_count": 0,
@@ -192,8 +189,6 @@ def reset_if_new_day(ip: str):
         }
 
         chat_history[ip] = []
-
-        # Remove old answer as well so a new day starts cleanly.
         last_answer.pop(ip, None)
 
 
@@ -205,11 +200,6 @@ def fetch_youtube_videos(
     query: str,
     max_results: int = 1
 ):
-    """
-    Fetch YouTube videos using YouTube Data API.
-    Returns an empty list if the API key is unavailable
-    or the request fails.
-    """
 
     if not YOUTUBE_API_KEY:
         return []
@@ -225,13 +215,17 @@ def fetch_youtube_videos(
     }
 
     try:
+
         response = requests.get(
             url,
             params=params,
-            timeout=5
+            timeout=8
         )
 
         if response.status_code != 200:
+            print(
+                f"YouTube error: {response.status_code}"
+            )
             return []
 
         items = response.json().get("items", [])
@@ -239,18 +233,19 @@ def fetch_youtube_videos(
         videos = []
 
         for item in items:
-            video_id = item.get("id", {}).get("videoId")
+
+            video_id = item.get(
+                "id", {}
+            ).get("videoId")
 
             snippet = item.get("snippet", {})
 
             thumbnails = snippet.get(
-                "thumbnails",
-                {}
+                "thumbnails", {}
             )
 
-            medium_thumbnail = thumbnails.get(
-                "medium",
-                {}
+            thumbnail = thumbnails.get(
+                "medium", {}
             ).get("url")
 
             if not video_id:
@@ -261,19 +256,25 @@ def fetch_youtube_videos(
                     "title",
                     "YouTube Video"
                 ),
-                "thumbnail": medium_thumbnail,
+                "thumbnail": thumbnail,
                 "videoId": video_id
             })
 
         return videos
 
+    except requests.RequestException as e:
+
+        print(f"YouTube connection error: {e}")
+        return []
+
     except Exception as e:
+
         print(f"YouTube API error: {e}")
         return []
 
 
 # ============================================================
-# TEXT LENGTH / TOKEN SAFETY
+# RESPONSE LENGTH SAFETY
 # ============================================================
 
 def summarize_text(
@@ -304,11 +305,10 @@ def ensure_token_safe_response(
     if not full_text:
         return ""
 
-    # Rough estimate:
-    # approximately 4 characters per token.
     estimated_tokens = len(full_text) / 4
 
     if estimated_tokens > max_tokens:
+
         return (
             "🔍 Summary due to length:\n"
             + summarize_text(
@@ -321,57 +321,120 @@ def ensure_token_safe_response(
 
 
 # ============================================================
-# MISTRAL API HELPER
+# GROQ API HELPER
 # ============================================================
 
-def ask_mistral_api(
+def ask_groq_api(
     messages: List[Dict[str, str]],
-    max_tokens: int = 1500,
-    temperature: float = 0.7
+    max_tokens: int = 800
 ):
-    """
-    Send chat messages to Mistral.
 
-    This replaces the previous Grok/Groq helper while
-    preserving the same role inside the application.
-    """
+    if not groq_client:
 
-    if not mistral_client:
-        return (
-            "❌ Server configuration error: "
-            "MISTRAL_API_KEY is not set correctly "
-            "on the host environment."
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Groq API is not configured. "
+                "Please check GROQ_API_KEY."
+            )
         )
 
     try:
-        response = mistral_client.chat.complete(
-            model="mistral-small-latest",
+
+        response = groq_client.chat.completions.create(
+
+            model=GROQ_MODEL,
+
             messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens
+
+            max_completion_tokens=max_tokens
+
         )
 
         if not response.choices:
-            return (
-                "❌ Mistral returned an empty response."
+
+            raise HTTPException(
+                status_code=502,
+                detail="Groq returned an empty response."
             )
 
         content = response.choices[0].message.content
 
-        if content is None:
-            return (
-                "❌ Mistral returned an empty response."
+        if not content:
+
+            raise HTTPException(
+                status_code=502,
+                detail="Groq returned an empty answer."
             )
 
         return str(content)
 
-    except Exception as e:
-        print(f"Mistral API error: {e}")
+    except HTTPException:
+        raise
 
-        return (
-            "❌ Seems like server issue, "
-            "Try after a while: "
-            f"{str(e)}"
+    except Exception as e:
+
+        print(
+            f"Groq API error: {type(e).__name__}: {e}"
+        )
+
+        status_code = getattr(
+            e,
+            "status_code",
+            None
+        )
+
+        # Free-tier rate limit reached.
+        if status_code == 429:
+
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Desh AI has temporarily reached "
+                    "its Groq API usage limit. "
+                    "Please try again later."
+                )
+            )
+
+        # Invalid or unauthorized API key.
+        if status_code == 401:
+
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Groq API authentication failed. "
+                    "Please check your API key."
+                )
+            )
+
+        # Model unavailable.
+        if status_code == 404:
+
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "The selected Groq model is unavailable. "
+                    "Check the current supported model list."
+                )
+            )
+
+        # Temporary provider/server errors.
+        if status_code in [500, 502, 503, 504]:
+
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Groq is temporarily unavailable. "
+                    "Please try again shortly."
+                )
+            )
+
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Unable to generate an answer right now. "
+                "Please try again."
+            )
         )
 
 
@@ -383,11 +446,9 @@ def generate_image_hf(
     prompt: str,
     ip: str
 ):
-    """
-    Generate an image using Hugging Face FLUX.
-    """
 
     if not HF_API_KEY:
+
         return {
             "error": (
                 "❌ HF_API_KEY is not configured "
@@ -409,16 +470,28 @@ def generate_image_hf(
     }
 
     try:
+
         res = requests.post(
             HF_IMAGE_URL,
             headers=headers,
             json=payload,
-            timeout=60
+            timeout=90
         )
 
         if res.status_code == 200:
 
             image_bytes = res.content
+
+            if not image_bytes.startswith(
+                b"\x89PNG\r\n\x1a\n"
+            ):
+
+                return {
+                    "error": (
+                        "❌ Image provider returned "
+                        "an invalid image response."
+                    )
+                }
 
             os.makedirs(
                 "static",
@@ -426,7 +499,7 @@ def generate_image_hf(
             )
 
             file_name = (
-                f"generated_{int(time.time())}.png"
+                f"generated_{uuid.uuid4().hex}.png"
             )
 
             file_path = os.path.join(
@@ -434,14 +507,9 @@ def generate_image_hf(
                 file_name
             )
 
-            with open(
-                file_path,
-                "wb"
-            ) as f:
+            with open(file_path, "wb") as f:
                 f.write(image_bytes)
 
-            # Increment image usage only after
-            # successful image generation.
             ip_usage_tracker[ip]["img_count"] += 1
 
             notice = (
@@ -460,20 +528,25 @@ def generate_image_hf(
                     fetch_youtube_videos(prompt)
             }
 
-        # Hugging Face can return useful JSON error details.
         try:
             error_details = res.json()
         except Exception:
-            error_details = res.text
+            error_details = res.text[:500]
+
+        print(
+            f"Hugging Face status {res.status_code}: "
+            f"{error_details}"
+        )
 
         return {
             "error": (
-                "❌ Image generation failed: "
-                f"{error_details}"
+                "❌ Image generation is temporarily "
+                "unavailable. Please try again later."
             )
         }
 
     except requests.Timeout:
+
         return {
             "error": (
                 "❌ Image generation timed out. "
@@ -481,15 +554,24 @@ def generate_image_hf(
             )
         }
 
-    except Exception as e:
-        print(
-            f"Hugging Face image error: {e}"
-        )
+    except requests.RequestException as e:
+
+        print(f"Hugging Face connection error: {e}")
 
         return {
             "error": (
-                "❌ Image generation failed: "
-                f"{str(e)}"
+                "❌ Could not connect to the image provider."
+            )
+        }
+
+    except Exception as e:
+
+        print(f"Hugging Face image error: {e}")
+
+        return {
+            "error": (
+                "❌ Image generation failed. "
+                "Please try again."
             )
         }
 
@@ -507,37 +589,48 @@ def ask_question(
     prompt = data.question.strip()
 
     if not prompt:
-        return {
-            "answer": "❌ Please enter a question."
-        }
 
-    # Safely obtain client IP.
-    client = request.client
+        return JSONResponse(
+            {
+                "answer": "❌ Please enter a question."
+            },
+            status_code=400
+        )
 
-    if client is not None:
-        ip = client.host
-    else:
-        ip = "unknown"
+    if len(prompt) > 12000:
+
+        return JSONResponse(
+            {
+                "answer": (
+                    "❌ Your question is too long. "
+                    "Please shorten it."
+                )
+            },
+            status_code=413
+        )
+
+    ip = get_client_ip(request)
 
     reset_if_new_day(ip)
 
     # --------------------------------------------------------
-    # QUESTION LIMIT
+    # DAILY QUESTION LIMIT
     # --------------------------------------------------------
 
     if (
         ip_usage_tracker[ip]["count"]
         >= question_limit_per_day
     ):
-        return {
-            "answer": (
-                f"❌ Limit reached "
-                f"({question_limit_per_day}/day)"
-            )
-        }
 
-    # Count the request.
-    ip_usage_tracker[ip]["count"] += 1
+        return JSONResponse(
+            {
+                "answer": (
+                    f"❌ Daily limit reached "
+                    f"({question_limit_per_day}/day)."
+                )
+            },
+            status_code=429
+        )
 
     # --------------------------------------------------------
     # LANGUAGE DETECTION
@@ -548,7 +641,7 @@ def ask_question(
     prompt_lower = prompt.lower()
 
     # --------------------------------------------------------
-    # FOUNDER / ABOUT DESH AI RESPONSE
+    # FOUNDER / ABOUT DESH AI
     # --------------------------------------------------------
 
     founder_keywords = [
@@ -572,42 +665,27 @@ def ask_question(
 
         reply = (
             "The Vision Behind 𝕯𝖊𝖘𝖍 𝐀𝖎: "
-            "This platform is a cutting-edge "
-            "fully AI-driven system established "
-            "in 2025 to democratize advanced "
-            "technology. Led by 𝗗𝗲𝘃𝗲𝘀𝗵 𝗦𝗶𝗻𝗴𝗵 "
+            "This platform is an AI-driven system "
+            "established in 2025 to democratize "
+            "advanced technology. Led by "
+            "𝗗𝗲𝘃𝗲𝘀𝗵 𝗦𝗶𝗻𝗴𝗵 "
             "(Founder & Managing Director), "
-            "the company has evolved into a "
-            "powerhouse of digital innovation.\n\n"
+            "the company focuses on digital innovation.\n\n"
 
-            
             "Core Capabilities and Innovations:\n"
-            "The platform distinguishes itself "
-            "through a suite of integrated tools "
-            "designed for utility and entertainment. "
-            "It features high-performance "
-            "conversational engines with voice "
-            "synthesis and real-time response "
-            "capabilities. The multi-functional "
-            "utility suite includes dynamic PDF "
-            "solutions for generators and editors, "
-            "and creative tools like FaceTalk in "
-            "𝕯𝖊𝖘𝖍 𝐀𝖎 Pro.\n\n"
+            "Desh AI features conversational AI, "
+            "voice synthesis, PDF tools, and creative "
+            "utilities designed for everyday use.\n\n"
 
             "Interactive Entertainment and API:\n"
-            "Unique projects like the Hand Cricket "
-            "game utilize pattern-recognition for "
-            "a personalized experience. The platform "
-            "leverages top-tier models ensuring "
-            "sophisticated language processing "
-            "for all users.\n\n"
+            "The platform also includes interactive "
+            "games, language tools and AI-powered "
+            "experiences.\n\n"
 
             "The 2025 Milestone:\n"
-            "Founded during a pivotal year for "
-            "artificial intelligence, the platform "
-            "focuses on clean UI and functional "
-            "web-based tools to bridge the gap "
-            "between complex coding and daily needs."
+            "Founded in 2025, Desh AI aims to make "
+            "useful technology accessible through "
+            "a simple web-based platform."
         )
 
         last_answer[ip] = reply
@@ -622,21 +700,36 @@ def ask_question(
     # IMAGE GENERATION TRIGGER
     # --------------------------------------------------------
 
+    image_keywords = [
+        "generate image",
+        "create image",
+        "make an image",
+        "draw an image",
+        "generate a picture",
+        "create a picture",
+        "make a picture",
+        "image generation"
+    ]
+
     if any(
         word in prompt_lower
-        for word in ["shhahshahshdhdhhsh"]
+        for word in image_keywords
     ):
 
         if (
             ip_usage_tracker[ip]["img_count"]
             >= image_limit_per_day
         ):
-            return {
-                "answer": (
-                    f"❌ Image limit reached "
-                    f"({image_limit_per_day}/day)"
-                )
-            }
+
+            return JSONResponse(
+                {
+                    "answer": (
+                        f"❌ Image limit reached "
+                        f"({image_limit_per_day}/day)."
+                    )
+                },
+                status_code=429
+            )
 
         return generate_image_hf(
             prompt,
@@ -650,18 +743,21 @@ def ask_question(
     explain_keywords = [
         "explain",
         "describe",
-        "in brief",
-        "long",
-        "elaborate"
+        "elaborate",
+        "in detail",
+        "long answer"
     ]
 
     if any(
         kw in prompt_lower
         for kw in explain_keywords
     ):
-        max_tokens = 2650
-    else:
+
         max_tokens = 1500
+
+    else:
+
+        max_tokens = 800
 
     # --------------------------------------------------------
     # SYSTEM PROMPT
@@ -670,9 +766,19 @@ def ask_question(
     system_prompt = {
         "role": "system",
         "content": (
-            "You are 𝕯𝖊𝖘𝖍 𝐀𝖎. "
-            f"Reply in {detected_lang} language, "
-            "using emojis naturally."
+            "You are Desh AI, a helpful, accurate and "
+            "friendly AI assistant.\n"
+            f"Reply in {detected_lang} language whenever "
+            "possible.\n"
+            "Understand the user's actual question before "
+            "answering.\n"
+            "Give accurate, clear and useful answers.\n"
+            "Do not invent facts, sources, or statistics.\n"
+            "If you are uncertain, say so honestly.\n"
+            "Use emojis naturally, without overusing them.\n"
+            "Format mathematical expressions clearly.\n"
+            "Keep simple answers concise and explain "
+            "complex questions properly."
         )
     }
 
@@ -683,7 +789,7 @@ def ask_question(
     previous_messages = chat_history.get(
         ip,
         []
-    )[-10:]
+    )[-8:]
 
     messages = (
         [system_prompt]
@@ -697,30 +803,31 @@ def ask_question(
     )
 
     # --------------------------------------------------------
-    # MISTRAL REQUEST
+    # GROQ API REQUEST
     # --------------------------------------------------------
 
     try:
 
-        reply = ask_mistral_api(
+        reply = ask_groq_api(
             messages,
-            max_tokens=max_tokens,
-            temperature=0.7
+            max_tokens=max_tokens
         )
 
-        reply = convert_to_latex_math(
-            reply
-        )
+        reply = convert_to_latex_math(reply)
 
         reply = ensure_token_safe_response(
             reply,
             max_tokens=max_tokens
         )
 
-        # Save assistant response in history.
+        # Save history only after successful response.
         chat_history[ip] = (
-            messages
+            previous_messages
             + [
+                {
+                    "role": "user",
+                    "content": prompt
+                },
                 {
                     "role": "assistant",
                     "content": reply
@@ -730,49 +837,69 @@ def ask_question(
 
         last_answer[ip] = reply
 
+        # Count only successful AI responses.
+        ip_usage_tracker[ip]["count"] += 1
+
         return {
             "answer": reply,
             "youtube_videos":
                 fetch_youtube_videos(prompt)
         }
 
-    except Exception as e:
+    except HTTPException as e:
 
-        print(
-            f"Error in /ask route: {e}"
+        return JSONResponse(
+            {
+                "error": e.detail,
+                "answer": e.detail
+            },
+            status_code=e.status_code
         )
 
-        return {
-            "error": (
-                f"Error fetching answer: {str(e)}"
-            )
-        }
+    except Exception as e:
+
+        print(f"Error in /ask route: {e}")
+
+        return JSONResponse(
+            {
+                "error": (
+                    "An unexpected server error occurred. "
+                    "Please try again."
+                )
+            },
+            status_code=500
+        )
 
 
 # ============================================================
-# TEXT-TO-SPEECH ROUTE
+# TEXT TO SPEECH ROUTE
 # ============================================================
 
 @app.post("/tts")
 def text_to_speech(data: dict):
 
-    text = data.get(
-        "text",
-        ""
-    )
+    text = data.get("text", "")
 
-    if not text:
+    if not isinstance(text, str) or not text.strip():
+
         return JSONResponse(
             {
-                "error":
-                    "No text provided"
+                "error": "No text provided."
             },
             status_code=400
         )
 
+    if len(text) > 10000:
+
+        return JSONResponse(
+            {
+                "error": "Text is too long for TTS."
+            },
+            status_code=413
+        )
+
     lang = detect_language(text)
 
-    # gTTS support used by your existing system.
     if lang not in ["en", "hi"]:
         lang = "en"
 
@@ -786,9 +913,7 @@ def text_to_speech(data: dict):
             slow=False
         )
 
-        tts.write_to_fp(
-            mp3_fp
-        )
+        tts.write_to_fp(mp3_fp)
 
         mp3_fp.seek(0)
 
@@ -797,50 +922,44 @@ def text_to_speech(data: dict):
             media_type="audio/mpeg",
             headers={
                 "Content-Disposition":
-                    "inline; "
-                    "filename=tts_output.mp3"
+                    "inline; filename=tts_output.mp3"
             }
         )
 
     except Exception as e:
 
-        print(
-            f"TTS error: {e}"
-        )
+        print(f"TTS error: {e}")
 
         return JSONResponse(
             {
-                "error":
-                    f"TTS generation failed: {str(e)}"
+                "error": (
+                    "TTS generation failed. "
+                    "Please try again."
+                )
             },
             status_code=500
         )
 
 
 # ============================================================
-# PDF ROUTE
+# PDF DOWNLOAD ROUTE
 # ============================================================
 
 @app.get("/download-pdf")
-def download_pdf(
-    request: Request
-):
+def download_pdf(request: Request):
 
-    client = request.client
-
-    if client is not None:
-        ip = client.host
-    else:
-        ip = "unknown"
+    ip = get_client_ip(request)
 
     if (
         ip not in last_answer
         or not last_answer[ip].strip()
     ):
+
         return JSONResponse(
             {
-                "error":
+                "error": (
                     "❌ No answer available for PDF."
+                )
             },
             status_code=400
         )
@@ -849,15 +968,10 @@ def download_pdf(
 
         buffer = io.BytesIO()
 
-        doc = SimpleDocTemplate(
-            buffer
-        )
+        doc = SimpleDocTemplate(buffer)
 
         styles = getSampleStyleSheet()
 
-        # Escape HTML-sensitive characters so
-        # generated answers don't accidentally
-        # break ReportLab Paragraph parsing.
         answer_text = last_answer[ip]
 
         answer_text = (
@@ -884,21 +998,20 @@ def download_pdf(
             media_type="application/pdf",
             headers={
                 "Content-Disposition":
-                    "attachment; "
-                    "filename=chat_answer.pdf"
+                    "attachment; filename=chat_answer.pdf"
             }
         )
 
     except Exception as e:
 
-        print(
-            f"PDF generation error: {e}"
-        )
+        print(f"PDF generation error: {e}")
 
         return JSONResponse(
             {
-                "error":
-                    f"PDF generation failed: {str(e)}"
+                "error": (
+                    "PDF generation failed. "
+                    "Please try again."
+                )
             },
             status_code=500
         )
@@ -910,125 +1023,89 @@ def download_pdf(
 
 @app.get("/numpuzz")
 def serve_numpuzz():
-    return FileResponse(
-        "static/numpuzz.html"
-    )
+    return FileResponse("static/numpuzz.html")
 
 
 @app.get("/snake")
 def serve_snake():
-    return FileResponse(
-        "static/snake.html"
-    )
+    return FileResponse("static/snake.html")
 
 
 @app.get("/calculator")
 def serve_calculator():
-    return FileResponse(
-        "static/calculator.html"
-    )
+    return FileResponse("static/calculator.html")
 
 
 @app.get("/BMI")
 def serve_bmi():
-    return FileResponse(
-        "static/BMI.html"
-    )
+    return FileResponse("static/BMI.html")
 
 
 @app.get("/Dictionary")
 def serve_dictionary():
-    return FileResponse(
-        "static/Dictionary.html"
-    )
+    return FileResponse("static/Dictionary.html")
 
 
 @app.get("/desh.html")
 def serve_desh():
-    return FileResponse(
-        "static/desh.html"
-    )
+    return FileResponse("static/desh.html")
 
 
 @app.get("/Tic")
 def serve_tic():
-    return FileResponse(
-        "static/Tic.html"
-    )
+    return FileResponse("static/Tic.html")
 
 
 @app.get("/Tac")
 def serve_tac():
-    return FileResponse(
-        "static/Tac.html"
-    )
+    return FileResponse("static/Tac.html")
 
 
 @app.get("/50")
 def serve_50():
-    return FileResponse(
-        "static/50.html"
-    )
+    return FileResponse("static/50.html")
 
 
 @app.get("/neon")
 def serve_neon():
-    return FileResponse(
-        "static/neon.html"
-    )
+    return FileResponse("static/neon.html")
 
 
 @app.get("/waves")
 def serve_waves():
-    return FileResponse(
-        "static/waves.html"
-    )
+    return FileResponse("static/waves.html")
 
 
 @app.get("/dot")
 def serve_dot():
-    return FileResponse(
-        "static/grid.html"
-    )
+    return FileResponse("static/grid.html")
 
 
 @app.get("/pdf")
 def serve_pdf():
-    return FileResponse(
-        "static/pdf.html"
-    )
+    return FileResponse("static/pdf.html")
 
 
 @app.get("/smart")
 def serve_smart():
-    return FileResponse(
-        "static/smart.html"
-    )
+    return FileResponse("static/smart.html")
 
 
 @app.get("/study")
 def serve_study():
-    return FileResponse(
-        "static/study.html"
-    )
+    return FileResponse("static/study.html")
 
 
 @app.get("/vsics")
 def serve_vsics():
-    return FileResponse(
-        "static/vsics.html"
-    )
+    return FileResponse("static/vsics.html")
 
 
 @app.get("/cam")
 def serve_cam():
-    return FileResponse(
-        "static/cam.html"
-    )
+    return FileResponse("static/cam.html")
 
 
 @app.get("/mag")
 def serve_mag():
-    return FileResponse(
-        "static/mag.html"
-        )
+    return FileResponse("static/mag.html")
