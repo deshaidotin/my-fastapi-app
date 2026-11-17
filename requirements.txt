@@ -1,13 +1,11 @@
-Flask
-flask-cors
-requests
-yt-dlp
-gunicorn
+
 fastapi
 uvicorn
+gunicorn
 pydantic
 python-dotenv
-mistralai==2.9.4
+groq
+requests
 langid
 reportlab
 gTTS
