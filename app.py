@@ -667,7 +667,7 @@ def ask_question(
             "This platform is an AI-driven system "
             "established in 2025 to democratize "
             "advanced technology. Led by "
-            "𝗗𝗲𝘃𝗲𝘀𝗵 𝗦𝗶𝗻𝗴𝗵 "
+            "𝗦𝗵𝗿𝗲𝘆𝗮 𝗦𝗶𝗻𝗴𝗵 "
             "(Founder & Managing Director), "
             "the company focuses on digital innovation.\n\n"
 
