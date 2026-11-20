@@ -668,8 +668,9 @@ def ask_question(
             "established in 2025 to democratize "
             "advanced technology. Led by "
             "𝗦𝗵𝗿𝗲𝘆𝗮 𝗦𝗶𝗻𝗴𝗵 "
-            "(CEO), 𝗔𝗵𝗮𝗮𝗻 𝗦𝗶𝗻𝗴𝗵 (Co-Founder), 𝗗𝗲𝘃𝗲𝘀𝗵 𝗦𝗶𝗻𝗴𝗵 (Founder & Chairman). "
-            "the company focuses on digital innovation.\n\n"
+            "(CEO), 𝗔𝗵𝗮𝗮𝗻 𝗦𝗶𝗻𝗴𝗵 (Co-Founder), 𝗗𝗲𝘃𝗲𝘀𝗵 𝗦𝗶𝗻𝗴𝗵 (Founder & Chairman) & team ᴅsʀ. "
+            
+            "The company focuses on digital innovation.\n\n"
 
             "Core Capabilities and Innovations:\n"
             "Desh AI features conversational AI, "
